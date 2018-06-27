@@ -26,6 +26,9 @@
 (global-prettify-symbols-mode 1)
 (setq-default fill-column 80)
 
+;; prevent dired window press o to split into three column
+(setq-default split-width-threshold 200)
+
 (setq recenter-positions '(top middle bottom))
 ;; delete the selection with a key press
 (delete-selection-mode t)
@@ -142,7 +145,7 @@ Single Capitals as you type."
   (if (and (executable-find "wc")
            (> (string-to-number (shell-command-to-string (format "wc -l %s" (buffer-file-name))))
               5000))
-      (linum-mode -1)))
+      nil))
 
 (add-hook 'find-file-hook 'spacemacs/check-large-file)
 
