@@ -1,3 +1,4 @@
+; -*- lexical-binding: t -*-
 ;;; keybindings.el --- zilongshanren Layer packages File for Spacemacs
 ;;
 ;; Copyright (c) 2015-2016 zilongshanren
@@ -16,6 +17,8 @@
 (define-key 'help-command (kbd "C-v") 'find-variable)
 (define-key 'help-command (kbd "C-l") 'find-library)
 (define-key 'help-command (kbd "C-i") 'info-display-manual)
+
+;; (define-key 'ivy-occur-grep-mode-map (kbd "C-d") 'evil-scroll-down)
 
 (global-set-key [(shift return)] 'zilongshanren/smart-open-line)
 (global-set-key (kbd "s-/") 'hippie-expand)
@@ -72,11 +75,15 @@
 (bind-key* "s-," 'zilongshanren/insert-comma-at-the-end-of-this-line)
 ;; (bind-key* "C-s-," 'zilongshanren/delete-comma-at-the-end-of-this-line)
 (bind-key* "C-c l" 'zilongshanren/insert-chrome-current-tab-url)
-;; (bind-key* "M-s o" 'occur-dwim)
 (bind-key* "C-=" 'er/expand-region)
 (bind-key* "M--" 'zilongshanren/goto-match-paren)
 (bind-key* "C-c k" 'which-key-show-top-level)
 (bind-key* "s-y" 'aya-expand)
+(bind-key* "C-." 'zilongshanren/insert-space-after-point)
+(bind-key* "M-i" 'string-inflection-java-style-cycle)
+(bind-key* "M-u" 'dakra-upcase-dwim)
+(bind-key* "M-l" 'dakra-downcase-dwim)
+(bind-key* "M-c" 'dakra-capitalize-dwim)
 ;; (bind-key* "C-l" 'recenter)
 
 
@@ -96,6 +103,10 @@
   "[s" (lambda (n) (interactive "p") (dotimes (c n nil) (insert " ")))
   "]s" (lambda (n) (interactive "p")
          (forward-char) (dotimes (c n nil) (insert " ")) (backward-char (1+ n))))
+
+(bb/define-key ivy-occur-grep-mode-map
+  (kbd "C-d") 'evil-scroll-down
+  "d" 'ivy-occur-delete-candidate)
 
 (with-eval-after-load 'company
   (progn
@@ -125,12 +136,15 @@
 (spacemacs/set-leader-keys "bmj" 'counsel-bookmark)
 
 (spacemacs/set-leader-keys "od" 'occur-dwim)
+(spacemacs/set-leader-keys "ok" 'zilongshanren-kill-other-persp-buffers)
 (spacemacs/set-leader-keys "ox" 'org-open-at-point-global)
 (spacemacs/set-leader-keys "or" 'zilongshanren/browser-refresh--chrome-applescript)
 
 (spacemacs/set-leader-keys "rh" 'helm-resume)
 (spacemacs/set-leader-keys "sj" 'counsel-imenu)
 
+(spacemacs/set-leader-keys-for-major-mode 'emacs-lisp-mode
+  "gU" 'xref-find-references)
 ;; ivy specific keybindings
 (if (configuration-layer/layer-usedp 'ivy)
     (progn
@@ -144,6 +158,8 @@
 (spacemacs/set-leader-keys "o(" 'ielm)
 
 (spacemacs/set-leader-keys "gL" 'magit-log-buffer-file)
+(spacemacs/set-leader-keys "gn" 'smerge-next)
+(spacemacs/set-leader-keys "gp" 'smerge-prev)
 (spacemacs/set-leader-keys "og" 'my-git-timemachine)
 
 (spacemacs/set-leader-keys "sj" 'zilongshanren/counsel-imenu)
@@ -158,20 +174,28 @@
 (spacemacs/set-leader-keys "ob" 'popwin:display-last-buffer)
 (spacemacs/set-leader-keys "oy" 'youdao-dictionary-search-at-point+)
 (spacemacs/set-leader-keys "bM" 'spacemacs/switch-to-messages-buffer)
+(spacemacs/set-leader-keys "sS" 'spacemacs/swiper-region-or-symbol)
 
 (bind-key* "s-p" 'find-file-in-project)
-(spacemacs/set-leader-keys "os" 'zilongshanren/search-in-fireball)
+(spacemacs/set-leader-keys "os" 'counsel-ag-thing-at-point)
 
 (spacemacs/set-leader-keys "pa" 'projectile-find-other-file)
 (spacemacs/set-leader-keys "pA" 'projectile-find-other-file-other-window)
 (spacemacs/set-leader-keys ":" 'counsel-M-x)
+(spacemacs/set-leader-keys "xe" 'set-buffer-file-coding-system)
+
+;; highlight
+(spacemacs/set-leader-keys "hh" 'zilongshanren/highlight-dwim)
+(spacemacs/set-leader-keys "hc" 'zilongshanren/clearn-highlight)
 
 (when (spacemacs/system-is-mswindows)
   (global-set-key (kbd "s-=") 'spacemacs/scale-up-font)
+  (spacemacs/set-leader-keys "bf" 'locate-current-file-in-explorer)
   (global-set-key (kbd "s--") 'spacemacs/scale-down-font)
   (global-set-key (kbd "s-0") 'spacemacs/reset-font-size)
   (global-set-key (kbd "s-q") 'save-buffers-kill-terminal)
   (global-set-key (kbd "s-v") 'yank)
+  (global-set-key (kbd "s-g") 'evil-avy-goto-char-2)
   (global-set-key (kbd "s-c") 'evil-yank)
   (global-set-key (kbd "s-a") 'mark-whole-buffer)
   (global-set-key (kbd "s-x") 'kill-region)

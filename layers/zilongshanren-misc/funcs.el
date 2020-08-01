@@ -1,3 +1,4 @@
+; -*- lexical-binding: t -*-
 ;;; funcs.el --- zilongshanren Layer packages File for Spacemacs
 ;;
 ;; Copyright (c) 2015-2016 zilongshanren 
@@ -8,6 +9,43 @@
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; License: GPLv3
+(defun browse-hugo-maybe ()
+  (interactive)
+  (let ((hugo-service-name "Hugo Server")
+        (hugo-service-port "1313"))
+    (if (prodigy-service-started-p (prodigy-find-service hugo-service-name))
+        (progn
+          (message "Hugo detected, launching browser...")
+          (browse-url (concat "http://localhost:" hugo-service-port))))))
+
+(defun zilongshanren/highlight-dwim ()
+  (interactive)
+  (if (use-region-p)
+      (progn
+        (highlight-frame-toggle)
+        (deactivate-mark))
+    (spacemacs/symbol-overlay)))
+
+(defun zilongshanren/clearn-highlight ()
+    (interactive)
+  (clear-highlight-frame)
+  (symbol-overlay-remove-all))
+
+(defun ivy-with-thing-at-point (cmd)
+  (let ((ivy-initial-inputs-alist
+         (list
+          (cons cmd (thing-at-point 'symbol)))))
+    (funcall cmd)))
+
+;; Example 1
+(defun counsel-ag-thing-at-point ()
+  (interactive)
+  (ivy-with-thing-at-point 'counsel-ag))
+
+;; Example 2
+;; (defun swiper-thing-at-point ()
+;;   (interactive)
+;;   (ivy-with-thing-at-point 'swiper))
 
 ;; @see https://bitbucket.org/lyro/evil/issue/511/let-certain-minor-modes-key-bindings
 (defmacro adjust-major-mode-keymap-with-evil (m &optional r)
@@ -16,6 +54,22 @@
         (evil-make-overriding-map ,(intern (concat m "-mode-map")) 'normal)
         ;; force update evil keymaps after git-timemachine-mode loaded
         (add-hook (quote ,(intern (concat m "-mode-hook"))) #'evil-normalize-keymaps))))
+
+(defun locate-current-file-in-explorer ()
+  (interactive)
+  (cond
+   ;; In buffers with file name
+   ((buffer-file-name)
+    (shell-command (concat "start explorer /e,/select,\"" (replace-regexp-in-string "/" "\\\\" (buffer-file-name)) "\"")))
+   ;; In dired mode
+   ((eq major-mode 'dired-mode)
+    (shell-command (concat "start explorer /e,\"" (replace-regexp-in-string "/" "\\\\" (dired-current-directory)) "\"")))
+   ;; In eshell mode
+   ((eq major-mode 'eshell-mode)
+    (shell-command (concat "start explorer /e,\"" (replace-regexp-in-string "/" "\\\\" (eshell/pwd)) "\"")))
+   ;; Use default-directory as last resource
+   (t
+    (shell-command (concat "start explorer /e,\"" (replace-regexp-in-string "/" "\\\\" default-directory) "\"")))))
 
 
 ;; insert ; at the end of current line
@@ -172,7 +226,9 @@ org-files and bookmarks"
   `((name . "Mail and News")
     (candidates . (("Calendar" . (lambda ()  (browse-url "https://www.google.com/calendar/render")))
                    ("RSS" . elfeed)
-                   ("Blog" . blog-admin-start)
+                   ("Blog" . browse-hugo-maybe)
+                   ("Search" . (lambda () (call-interactively #'engine/search-google)))
+                   ("Random Todo" . org-random-entry)
                    ("Github" . (lambda() (helm-github-stars)))
                    ("Calculator" . (lambda () (helm-calcul-expression)))
                    ("Run current flie" . (lambda () (zilongshanren/run-current-file)))
@@ -207,20 +263,6 @@ e.g. Sunday, September 17, 2000."
 " )))
 
 
-(define-minor-mode
-  shadowsocks-proxy-mode
-  :global t
-  :init-value nil
-  :lighter " SS"
-  (if shadowsocks-proxy-mode
-      (setq url-gateway-method 'socks)
-    (setq url-gateway-method 'native)))
-
-
-(define-global-minor-mode
-  global-shadowsocks-proxy-mode shadowsocks-proxy-mode shadowsocks-proxy-mode
-  :group 'shadowsocks-proxy)
-
 
 (defun zilongshanren/open-file-with-projectile-or-counsel-git ()
   (interactive)
@@ -230,8 +272,18 @@ e.g. Sunday, September 17, 2000."
         (projectile-find-file)
       (counsel-file-jump))))
 
+(defun zilongshanren/pomodoro-notification ()
+  "show notifications when pomodoro end"
+  (if (spacemacs/system-is-mswindows)
+      (progn (add-hook 'org-pomodoro-finished-hook '(lambda () (sound-wav-play (expand-file-name "~/.spacemacs.d/game_win.wav"))))
+             (add-hook 'org-pomodoro-short-break-finished-hook '(lambda () (sound-wav-play (expand-file-name "~/.spacemacs.d/game_win.wav"))))
+             (add-hook 'org-pomodoro-long-break-finished-hook '(lambda () (sound-wav-play (expand-file-name "~/.spacemacs.d/game_win.wav")))))
+    (progn (add-hook 'org-pomodoro-finished-hook '(lambda () (zilongshanren/growl-notification "Pomodoro Finished" "☕️ Have a break!" t)))
+           (add-hook 'org-pomodoro-short-break-finished-hook '(lambda () (zilongshanren/growl-notification "Short Break" "🐝 Ready to Go?" t)))
+             (add-hook 'org-pomodoro-long-break-finished-hook '(lambda () (zilongshanren/growl-notification "Long Break" " 💪 Ready to Go?" t))))))
 
 ;; http://blog.lojic.com/2009/08/06/send-growl-notifications-from-carbon-emacs-on-osx/
+;; should register Emacs.app to the Growl app at the first, otherwise it won't be display
 (defun zilongshanren/growl-notification (title message &optional sticky)
   "Send a Growl notification"
   (do-applescript
@@ -282,13 +334,33 @@ e.g. Sunday, September 17, 2000."
   (interactive)
   (insert (zilongshanren/retrieve-chrome-current-tab-url)))
 
+(defun zilongshanren/list-all-tabs ()
+  (interactive)
+  (ivy-read
+   "links:" (split-string (do-applescript "set titleString to \"\"
+tell application \"$1\"
+	set window_list to every window # get the windows
+	repeat with the_window in window_list # for every window
+		set tab_list to every tab in the_window # get the tabs
+		repeat with the_tab in tab_list # for every tab
+			set the_url to the URL of the_tab # grab the URL
+			set titleString to titleString & the_url & \"
+\"
+		end repeat
+	end repeat
+	return titleString
+end tell
+") "\n")
+   :action 'insert
+   :initial-input (ivy-thing-at-point)))
+
 (defun zilongshanren/retrieve-chrome-current-tab-url()
   "Get the URL of the active tab of the first window"
   (interactive)
   (let ((result (do-applescript
                  (concat
                   "set frontmostApplication to path to frontmost application\n"
-                  "tell application \"Google Chrome\"\n"
+                  "tell application \"$1\"\n"
                   "	set theUrl to get URL of active tab of first window\n"
                   "	set theResult to (get theUrl) \n"
                   "end tell\n"
@@ -474,7 +546,7 @@ With PREFIX, cd to project root."
   (let ((current-prefix-arg nil))
     (call-interactively
      (if p #'spacemacs/swiper-region-or-symbol
-       #'counsel-grep-or-swiper))))
+       #'swiper))))
 
 (defun ivy-ff-checksum ()
   (interactive)
@@ -558,13 +630,15 @@ With PREFIX, cd to project root."
       (message "No remote branch"))
      (t
       (browse-url
-       (format "https://github.com/%s/pull/new/%s"
-               (replace-regexp-in-string
-                "\\`.+github\\.com:\\(.+\\)\\.git\\'" "\\1"
-                (magit-get "remote"
-                           (magit-get-remote)
-                           "url"))
-               remote-branch))))))
+       (if (or 1 (spacemacs/system-is-mswindows))
+           "https://git.code.oa.com/lionqu/HLMJ_js/merge_requests/new"
+         (format "https://github.com/%s/pull/new/%s"
+                 (replace-regexp-in-string
+                  "\\`.+github\\.com:\\(.+\\)\\.git\\'" "\\1"
+                  (magit-get "remote"
+                             (magit-get-remote)
+                             "url"))
+                 remote-branch)))))))
 
 (defun zilongshanren/markdown-to-html ()
   (interactive)

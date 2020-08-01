@@ -1,3 +1,4 @@
+; -*- lexical-binding: t -*-
 ;;; packages.el --- zilongshanren Layer packages File for Spacemacs
 ;;
 ;; Copyright (c) 2014-2016 zilongshanren
@@ -17,11 +18,12 @@
         css-mode
         paredit
         lispy
+        caps-lock
         cmake-font-lock
         cmake-mode
         flycheck
-        nodejs-repl
         (nodejs-repl-eval :location local)
+        (compile-dwim :location local)
         js2-mode
         js2-refactor
         json-mode
@@ -43,7 +45,73 @@
         cider
         ;; editorconfig
         robe
+        lsp-mode
+        typescript-mode
         ))
+
+(defun zilongshanren-programming/post-init-typescript-mode ()
+  (add-hook 'typescript-mode-hook 'my-ts-mode-hook))
+
+(defun zilongshanren-programming/post-init-lsp-mode ()
+  (progn
+
+    (setq lsp-ui-doc-enable nil)
+    
+    (defun lsp--auto-configure ()
+      "Autoconfigure `lsp-ui', `company-lsp' if they are installed."
+
+      (with-no-warnings
+        (when (functionp 'lsp-ui-mode)
+          (lsp-ui-mode))
+
+        (cond
+         ((eq :none lsp-prefer-flymake))
+         ((and (not (version< emacs-version "26.1")) lsp-prefer-flymake)
+          (lsp--flymake-setup))
+         ((and (functionp 'lsp-ui-mode) (featurep 'flycheck))
+          (require 'lsp-ui-flycheck)
+          (lsp-ui-flycheck-enable t)
+          (flycheck-mode -1)))
+
+        (when (functionp 'company-lsp)
+          (company-mode 1)
+
+          ;; make sure that company-capf is disabled since it is not indented to be
+          ;; used in combination with lsp-mode (see #884)
+          (setq-local company-backends (remove 'company-capf company-backends))
+
+          (when (functionp 'yas-minor-mode)
+            (yas-minor-mode t)))))
+    
+    (add-hook 'lsp-after-open-hook 'zilongshanren-refresh-imenu-index)
+
+    (defun hidden-lsp-ui-sideline ()
+      (interactive)
+      (if (< (window-width) 180)
+          (progn
+            
+            (setq lsp-ui-sideline-show-code-actions nil)
+            (setq lsp-ui-sideline-show-diagnostics nil)
+            (setq lsp-ui-sideline-show-hover nil)
+            (setq lsp-ui-sideline-show-symbol nil))
+        (progn
+            
+          (setq lsp-ui-sideline-show-code-actions nil)
+          ;; (setq lsp-ui-sideline-show-diagnostics t)
+          (setq lsp-ui-sideline-show-hover t)
+          ;; (setq lsp-ui-sideline-show-symbol t)
+          )))
+    
+    (advice-add 'lsp-ui-sideline--run :after 'hidden-lsp-ui-sideline)
+
+    (setq lsp-auto-configure t)
+    (setq lsp-prefer-flymake nil)))
+
+(defun zilongshanren-programming/init-compile-dwim ()
+  (use-package compile-dwim
+    :commands (compile-dwim-run compile-dwim-compile)
+    :init))
+
 
 (defun zilongshanren-programming/post-init-robe ()
   (progn
@@ -74,6 +142,12 @@
         "sl" 'zilongshanren/ruby-send-current-line
         "sL" 'zilongshanren/ruby-send-current-line-and-go
         "sI" 'zilongshanren/start-inf-ruby-and-robe))))
+
+(defun zilongshanren-programming/init-caps-lock ()
+  (use-package caps-lock
+    :init
+    (progn
+      (bind-key* "s-e" 'caps-lock-mode))))
 
 (defun zilongshanren-programming/init-editorconfig ()
   (use-package editorconfig
@@ -174,6 +248,12 @@
 (defun zilongshanren-programming/post-init-yasnippet ()
   (progn
     (set-face-background 'secondary-selection "gray")
+    
+    (with-eval-after-load 'yasnippet
+      (progn
+        (define-key yas-keymap [(tab)]       (yas-filtered-definition 'yas-next-field))
+        (define-key yas-keymap (kbd "TAB")   (yas-filtered-definition 'yas-next-field))))
+
     (setq-default yas-prompt-functions '(yas-ido-prompt yas-dropdown-prompt))
     (mapc #'(lambda (hook) (remove-hook hook 'spacemacs/load-yasnippet)) '(prog-mode-hook
                                                                       org-mode-hook
@@ -204,10 +284,6 @@
     "ti" 'my-toggle-web-indent))
 
 
-(defun zilongshanren-programming/init-nodejs-repl ()
-  (use-package nodejs-repl
-    :init
-    :defer t))
 
 (defun zilongshanren-programming/init-flycheck-package ()
   (use-package flycheck-package))
@@ -230,7 +306,7 @@
       (push '(cider-repl-mode . ("[`'~@]+" "#" "#\\?@?")) lispy-parens-preceding-syntax-alist)
 
       (spacemacs|hide-lighter lispy-mode)
-      (define-key lispy-mode-map (kbd "s-j") 'lispy-splice)
+      (define-key lispy-mode-map (kbd "M-s") 'lispy-splice)
       (define-key lispy-mode-map (kbd "s-k") 'paredit-splice-sexp-killing-backward)
 
       (with-eval-after-load 'cider-repl
@@ -240,6 +316,7 @@
        'minibuffer-setup-hook
        'conditionally-enable-lispy)
       (define-key lispy-mode-map (kbd "s-m") 'lispy-mark-symbol)
+      (define-key lispy-mode-map (kbd "s-u") 'lispy-undo)
       (define-key lispy-mode-map (kbd "s-1") 'lispy-describe-inline)
       (define-key lispy-mode-map (kbd "s-2") 'lispy-arglist-inline))))
 
@@ -274,9 +351,33 @@
 
 (defun zilongshanren-programming/post-init-js2-refactor ()
   (progn
+    
+(defun js2r-toggle-object-property-access-style ()
+  "Toggle js object property access style."
+  (interactive)
+  (js2r--guard)
+  (js2r--wait-for-parse
+   (save-excursion
+     (let ((node (js2-node-at-point)))
+       (if (js2-string-node-p node)
+           (let* ((start (js2-node-abs-pos node))
+                  (end (+ start (js2-node-len node))))
+             (when (memq (char-before start) '(?\[))
+               (save-excursion
+                 (goto-char (-  end 1)) (delete-char 2)
+                 (goto-char (+ start 1)) (delete-char -2) (insert "."))))
+         (let* ((start (js2-node-abs-pos node))
+                (end (+ start (js2-node-len node))))
+           (when (memq (char-before start) '(?.))
+             (save-excursion
+               (goto-char end) (insert "\']")
+               (goto-char start) (delete-char -1) (insert "[\'")))))))))
+
     (spacemacs/set-leader-keys-for-major-mode 'js2-mode
       "r>" 'js2r-forward-slurp
-      "r<" 'js2r-forward-barf)))
+      "r<" 'js2r-forward-barf
+      "r." 'js2r-toggle-object-property-access-style
+      "rep" 'js2r-expand-call-args)))
 
 (defun zilongshanren-programming/post-init-js2-mode ()
   (progn
@@ -289,6 +390,8 @@
     (setq company-backends-js2-mode '((company-dabbrev-code :with company-keywords company-etags)
                                       company-files company-dabbrev))
 
+    (setq company-backends-js-mode '((company-dabbrev-code :with company-keywords company-etags)
+                                     company-files company-dabbrev))
 
     (add-hook 'js2-mode-hook 'my-js2-mode-hook)
 
@@ -517,11 +620,16 @@
 
 (defun zilongshanren-programming/post-init-company ()
   (progn
+    (setq company-dabbrev-code-other-buffers 'all)
+    ;; enable dabbrev-expand in company completion https://emacs-china.org/t/topic/6381
+    (setq company-dabbrev-char-regexp "[\\.0-9a-z-_'/]")
+
+    
     (setq company-minimum-prefix-length 1
           company-idle-delay 0.08)
 
     (when (configuration-layer/package-usedp 'company)
-      (spacemacs|add-company-backends :modes shell-script-mode makefile-bsdmake-mode sh-mode lua-mode nxml-mode conf-unix-mode json-mode graphviz-dot-mode js2-mode))
+      (spacemacs|add-company-backends :modes shell-script-mode makefile-bsdmake-mode sh-mode lua-mode nxml-mode conf-unix-mode json-mode graphviz-dot-mode js2-mode js-mode))
     ))
 (defun zilongshanren-programming/post-init-company-c-headers ()
   (progn
